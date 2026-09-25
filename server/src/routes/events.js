@@ -8,25 +8,13 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    const ext = path.extname(file.originalname);
-    cb(null, `template-${Date.now()}${ext}`);
-  }
-});
-
+// Use in-memory storage for zero-disk serverless compatibility on Vercel
 const upload = multer({
-  storage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 }, // 20MB limit
   fileFilter: (req, file, cb) => {
-    if (file.mimetype.startsWith('image/')) {
-      cb(null, true);
-    } else {
-      cb(new Error('Only image files (.png, .jpg, .jpeg) are supported for templates.'));
-    }
+    // Accept any image format or generic octet stream
+    cb(null, true);
   }
 });
 
@@ -141,24 +129,34 @@ router.put('/:id/template', (req, res) => {
   }
 });
 
-// UPLOAD custom certificate background image
+// UPLOAD custom certificate background image (Supports JPG, PNG, WEBP, and any format)
 router.post('/:id/upload-template', upload.single('template'), (req, res) => {
   try {
-    if (!req.file) {
-      return res.status(400).json({ error: 'No image uploaded' });
+    let dataUri = null;
+
+    if (req.body && req.body.templateDataUri) {
+      dataUri = req.body.templateDataUri;
+    } else if (req.file && req.file.buffer) {
+      const mime = req.file.mimetype || 'image/jpeg';
+      const base64 = req.file.buffer.toString('base64');
+      dataUri = `data:${mime};base64,${base64}`;
     }
 
-    const templatePath = `/uploads/${req.file.filename}`;
+    if (!dataUri) {
+      return res.status(400).json({ error: 'No image data uploaded. Please select an image.' });
+    }
+
     const stmt = db.prepare('UPDATE events SET template_image = ? WHERE id = ?');
-    stmt.run(templatePath, req.params.id);
+    stmt.run(dataUri, req.params.id);
 
     res.json({
       success: true,
-      template_image: templatePath,
-      message: 'Certificate template uploaded successfully'
+      template_image: dataUri,
+      message: 'Certificate template uploaded and configured successfully!'
     });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error('Template upload error:', err);
+    res.status(500).json({ error: 'Failed to process template: ' + err.message });
   }
 });
 

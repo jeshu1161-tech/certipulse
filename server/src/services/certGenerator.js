@@ -2,11 +2,7 @@ import { PDFDocument, rgb, StandardFonts } from 'pdf-lib';
 import QRCode from 'qrcode';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const certsDir = path.join(__dirname, '..', '..', 'generated_certs');
+import { certsDir } from '../db.js';
 
 export async function generateCertificate({
   studentName,
@@ -43,22 +39,44 @@ export async function generateCertificate({
 
   const qrImage = await pdfDoc.embedPng(qrImageBytes);
 
-  // If a custom template image is provided and exists, draw it as background
-  if (templatePath && fs.existsSync(templatePath)) {
-    const templateBytes = fs.readFileSync(templatePath);
-    let bgImage;
-    if (templatePath.endsWith('.png')) {
-      bgImage = await pdfDoc.embedPng(templateBytes);
-    } else {
-      bgImage = await pdfDoc.embedJpg(templateBytes);
+  // If a custom template image is provided (Data URI or file path), embed it
+  let bgImageEmbedded = false;
+  if (templatePath) {
+    let templateBytes = null;
+    if (typeof templatePath === 'string' && templatePath.startsWith('data:')) {
+      const base64Index = templatePath.indexOf('base64,');
+      if (base64Index !== -1) {
+        templateBytes = Buffer.from(templatePath.slice(base64Index + 7), 'base64');
+      }
+    } else if (typeof templatePath === 'string' && fs.existsSync(templatePath)) {
+      templateBytes = fs.readFileSync(templatePath);
     }
-    page.drawImage(bgImage, {
-      x: 0,
-      y: 0,
-      width,
-      height
-    });
-  } else {
+
+    if (templateBytes && templateBytes.length > 0) {
+      let bgImage = null;
+      try {
+        bgImage = await pdfDoc.embedJpg(templateBytes);
+      } catch (jpgErr) {
+        try {
+          bgImage = await pdfDoc.embedPng(templateBytes);
+        } catch (pngErr) {
+          console.warn('Could not embed custom template as JPG or PNG:', pngErr.message);
+        }
+      }
+
+      if (bgImage) {
+        page.drawImage(bgImage, {
+          x: 0,
+          y: 0,
+          width,
+          height
+        });
+        bgImageEmbedded = true;
+      }
+    }
+  }
+
+  if (!bgImageEmbedded) {
     // Render default high-end academic design
     drawProfessionalCertificateBackground(page, width, height);
 
@@ -222,7 +240,14 @@ export async function generateCertificate({
   // Save the PDF
   const pdfBytes = await pdfDoc.save();
   const filePath = path.join(certsDir, `${certId}.pdf`);
-  fs.writeFileSync(filePath, pdfBytes);
+  try {
+    if (!fs.existsSync(certsDir)) {
+      fs.mkdirSync(certsDir, { recursive: true });
+    }
+    fs.writeFileSync(filePath, pdfBytes);
+  } catch (err) {
+    console.warn('Could not write certificate PDF file to disk:', err.message);
+  }
 
   return {
     filePath,

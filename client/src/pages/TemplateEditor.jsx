@@ -163,15 +163,63 @@ export default function TemplateEditor({ event, onBack }) {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('template', file);
-
     try {
       setUploading(true);
-      const res = await fetch(`/api/events/${event.id}/upload-template`, {
-        method: 'POST',
-        body: formData
-      });
+
+      // Convert any image format to standard high-quality JPEG Data URI
+      let dataUri;
+      try {
+        dataUri = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error('Failed to read file.'));
+          reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Selected file is not a valid image format.'));
+            img.onload = () => {
+              let { width, height } = img;
+              const maxDim = 2400;
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL('image/jpeg', 0.92));
+            };
+            img.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      } catch (convErr) {
+        console.warn('Canvas conversion fallback:', convErr);
+      }
+
+      let res;
+      if (dataUri) {
+        res = await fetch(`/api/events/${event.id}/upload-template`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateDataUri: dataUri })
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('template', file);
+        res = await fetch(`/api/events/${event.id}/upload-template`, {
+          method: 'POST',
+          body: formData
+        });
+      }
+
       const data = await res.json();
       if (res.ok) {
         setBgImageSrc(data.template_image);
@@ -183,6 +231,7 @@ export default function TemplateEditor({ event, onBack }) {
       alert('Upload error: ' + err.message);
     } finally {
       setUploading(false);
+      e.target.value = '';
     }
   };
 
@@ -274,15 +323,15 @@ export default function TemplateEditor({ event, onBack }) {
                 <span>Upload Custom Certificate Image</span>
                 <input
                   type="file"
-                  accept="image/png, image/jpeg"
+                  accept="image/*, .jpg, .jpeg, .png, .webp"
                   className="hidden"
                   onChange={handleUploadTemplate}
                   disabled={uploading}
                 />
               </label>
-              <p className="text-[11px] text-slate-500 mt-0.5">Supports PNG or JPG (Recommended: 1920x1080)</p>
+              <p className="text-[11px] text-slate-500 mt-0.5">Supports any image format (JPG, PNG, WEBP, etc.)</p>
             </div>
-            {uploading && <p className="text-xs text-cyan-400">Uploading template...</p>}
+            {uploading && <p className="text-xs text-cyan-400">Processing & uploading template...</p>}
           </div>
 
           {/* Coordinate Adjustment Form */}

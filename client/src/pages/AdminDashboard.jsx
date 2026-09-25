@@ -90,20 +90,68 @@ export default function AdminDashboard({ initialEventId, onOpenTemplateEditor, o
 
   const selectedEvent = events.find(e => e.id === selectedEventId);
 
-  // 3. Handle Compulsory Template Upload
+  // 3. Handle Compulsory Template Upload (Supports any image format: JPG, JPEG, PNG, WEBP, etc.)
   const handleUploadTemplate = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    const formData = new FormData();
-    formData.append('template', file);
-
     try {
       setUploadingTemplate(true);
-      const res = await fetch(`/api/events/${selectedEventId}/upload-template`, {
-        method: 'POST',
-        body: formData
-      });
+
+      // Convert any image format to standard high-quality JPEG Data URI
+      let dataUri;
+      try {
+        dataUri = await new Promise((resolve, reject) => {
+          const reader = new FileReader();
+          reader.onerror = () => reject(new Error('Failed to read file.'));
+          reader.onload = () => {
+            const img = new Image();
+            img.onerror = () => reject(new Error('Selected file is not a valid image format.'));
+            img.onload = () => {
+              let { width, height } = img;
+              const maxDim = 2400;
+              if (width > maxDim || height > maxDim) {
+                if (width > height) {
+                  height = Math.round((height * maxDim) / width);
+                  width = maxDim;
+                } else {
+                  width = Math.round((width * maxDim) / height);
+                  height = maxDim;
+                }
+              }
+              const canvas = document.createElement('canvas');
+              canvas.width = width;
+              canvas.height = height;
+              const ctx = canvas.getContext('2d');
+              ctx.fillStyle = '#ffffff';
+              ctx.fillRect(0, 0, width, height);
+              ctx.drawImage(img, 0, 0, width, height);
+              resolve(canvas.toDataURL('image/jpeg', 0.92));
+            };
+            img.src = reader.result;
+          };
+          reader.readAsDataURL(file);
+        });
+      } catch (convErr) {
+        console.warn('Canvas conversion fallback:', convErr);
+      }
+
+      let res;
+      if (dataUri) {
+        res = await fetch(`/api/events/${selectedEventId}/upload-template`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ templateDataUri: dataUri })
+        });
+      } else {
+        const formData = new FormData();
+        formData.append('template', file);
+        res = await fetch(`/api/events/${selectedEventId}/upload-template`, {
+          method: 'POST',
+          body: formData
+        });
+      }
+
       const data = await res.json();
 
       if (res.ok) {
@@ -117,6 +165,7 @@ export default function AdminDashboard({ initialEventId, onOpenTemplateEditor, o
       alert('Upload error: ' + err.message);
     } finally {
       setUploadingTemplate(false);
+      e.target.value = '';
     }
   };
 
@@ -360,7 +409,7 @@ export default function AdminDashboard({ initialEventId, onOpenTemplateEditor, o
                   <span>{selectedEvent.template_image ? 'Replace Template Image' : 'Upload Template Image *'}</span>
                   <input
                     type="file"
-                    accept="image/png, image/jpeg"
+                    accept="image/*, .jpg, .jpeg, .png, .webp"
                     className="hidden"
                     onChange={handleUploadTemplate}
                     disabled={uploadingTemplate}
@@ -381,13 +430,25 @@ export default function AdminDashboard({ initialEventId, onOpenTemplateEditor, o
 
             {/* Template Status / Thumbnail preview if exists */}
             {selectedEvent.template_image && (
-              <div className="mt-4 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-                <span className="flex items-center space-x-2 text-emerald-400 font-semibold">
-                  <CheckCircle2 className="w-4 h-4" />
-                  <span>Active Template: {selectedEvent.template_image}</span>
-                </span>
-                <span className="text-[11px] text-slate-500">
-                  Ready to print student names & send via {adminEmail}
+              <div className="mt-4 pt-4 border-t border-slate-800/80 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
+                <div className="flex items-center space-x-3 text-emerald-400 font-semibold">
+                  <img
+                    src={selectedEvent.template_image}
+                    alt="Active Certificate Template"
+                    className="w-16 h-11 object-cover rounded-lg border border-emerald-500/50 shadow-md shadow-emerald-950"
+                  />
+                  <div>
+                    <span className="flex items-center space-x-1.5 text-white font-bold">
+                      <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+                      <span>Official Certificate Template Active & Ready</span>
+                    </span>
+                    <p className="text-[11px] text-slate-400 font-normal">
+                      Attendee credentials & verifiable QR code will be dynamically imprinted
+                    </p>
+                  </div>
+                </div>
+                <span className="text-[11px] text-slate-400 bg-slate-950 px-3 py-1.5 rounded-xl border border-slate-800">
+                  Sender: <b className="text-slate-200">{adminEmail}</b>
                 </span>
               </div>
             )}

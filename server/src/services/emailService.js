@@ -77,9 +77,21 @@ export async function sendCertificateEmail({
   eventDate,
   certId,
   pdfPath,
+  pdfBytes,
   verifyUrl
 }) {
   const { transporter, fromEmail, isRealGmail, isTestFallback } = await getTransporter();
+
+  const attachment = {
+    filename: `Certificate_${studentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
+    contentType: 'application/pdf'
+  };
+
+  if (pdfBytes) {
+    attachment.content = Buffer.from(pdfBytes);
+  } else if (pdfPath) {
+    attachment.path = pdfPath;
+  }
 
   const mailOptions = {
     from: `"Cybersecurity Department" <${fromEmail}>`,
@@ -120,13 +132,7 @@ export async function sendCertificateEmail({
         </div>
       </div>
     `,
-    attachments: [
-      {
-        filename: `Certificate_${studentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
-        path: pdfPath,
-        contentType: 'application/pdf'
-      }
-    ]
+    attachments: [attachment]
   };
 
   const info = await transporter.sendMail(mailOptions);
