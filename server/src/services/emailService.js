@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 
 let runtimeSmtpConfig = {
-  adminEmail: process.env.ADMIN_EMAIL || 'admin.murattukozhioffical@gmail.com',
+  adminEmail: process.env.ADMIN_EMAIL || 'jeshu1161@gmail.com',
   adminPassword: process.env.ADMIN_EMAIL_PASSWORD || process.env.GMAIL_APP_PASSWORD || ''
 };
 

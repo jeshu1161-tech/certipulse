@@ -29,7 +29,7 @@ export default function AdminDashboard({ initialEventId, onOpenTemplateEditor, o
   const [templateFile, setTemplateFile] = useState(null);
 
   // SMTP Gmail Configuration state
-  const [adminEmail, setAdminEmail] = useState('admin.murattukozhioffical@gmail.com');
+  const [adminEmail, setAdminEmail] = useState('jeshu1161@gmail.com');
   const [adminPassword, setAdminPassword] = useState('');
   const [smtpSaved, setSmtpSaved] = useState(false);
   const [showSmtpSettings, setShowSmtpSettings] = useState(false);

@@ -23,7 +23,7 @@ router.post('/smtp-config', (req, res) => {
   updateAdminSmtpConfig({ adminEmail, adminPassword });
   res.json({
     success: true,
-    message: `Sender email configured as ${adminEmail || 'admin.murattukozhioffical@gmail.com'}. Real emails will now be dispatched directly via Gmail SMTP!`
+    message: `Sender email configured as ${adminEmail || 'jeshu1161@gmail.com'}. Real emails will now be dispatched directly via Gmail SMTP!`
   });
 });
 
