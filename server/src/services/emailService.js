@@ -1,15 +1,44 @@
 import nodemailer from 'nodemailer';
-import fs from 'node:fs';
 
-let transporterPromise = null;
+let runtimeSmtpConfig = {
+  adminEmail: process.env.ADMIN_EMAIL || 'admin.murattukozhioffical@gmail.com',
+  adminPassword: process.env.ADMIN_EMAIL_PASSWORD || process.env.GMAIL_APP_PASSWORD || ''
+};
+
+export function updateAdminSmtpConfig({ adminEmail, adminPassword }) {
+  if (adminEmail) runtimeSmtpConfig.adminEmail = adminEmail.trim();
+  if (adminPassword) runtimeSmtpConfig.adminPassword = adminPassword.trim().replace(/\s+/g, '');
+}
+
+export function getAdminSmtpConfig() {
+  return {
+    adminEmail: runtimeSmtpConfig.adminEmail,
+    isConfigured: Boolean(runtimeSmtpConfig.adminPassword)
+  };
+}
 
 async function getTransporter() {
-  if (transporterPromise) return transporterPromise;
+  const { adminEmail, adminPassword } = runtimeSmtpConfig;
 
-  transporterPromise = (async () => {
-    // If user provided custom SMTP in environment
-    if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
-      return nodemailer.createTransport({
+  // 1. Direct Gmail SMTP with Admin's email address
+  if (adminPassword) {
+    return {
+      transporter: nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: adminEmail,
+          pass: adminPassword
+        }
+      }),
+      fromEmail: adminEmail,
+      isRealGmail: true
+    };
+  }
+
+  // 2. Custom SMTP Host if provided in environment
+  if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    return {
+      transporter: nodemailer.createTransport({
         host: process.env.SMTP_HOST,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_SECURE === 'true',
@@ -17,36 +46,28 @@ async function getTransporter() {
           user: process.env.SMTP_USER,
           pass: process.env.SMTP_PASS
         }
-      });
-    }
+      }),
+      fromEmail: process.env.SMTP_USER,
+      isRealGmail: false
+    };
+  }
 
-    // Default: create an ethereal test account for zero-config demonstration
-    try {
-      const testAccount = await nodemailer.createTestAccount();
-      console.log('Using Ethereal Mailer for demo email dispatch:');
-      console.log(`Account: ${testAccount.user}`);
-
-      return nodemailer.createTransport({
-        host: 'smtp.ethereal.email',
-        port: 587,
-        secure: false,
-        auth: {
-          user: testAccount.user,
-          pass: testAccount.pass
-        }
-      });
-    } catch (err) {
-      console.warn('Could not initialize ethereal account, using mock transport fallback', err.message);
-      return {
-        sendMail: async (opts) => {
-          console.log(`[Mock Email Sent] To: ${opts.to}, Subject: ${opts.subject}`);
-          return { messageId: 'mock-' + Date.now() };
-        }
-      };
-    }
-  })();
-
-  return transporterPromise;
+  // 3. Fallback: Ethereal test inbox for development
+  const testAccount = await nodemailer.createTestAccount();
+  return {
+    transporter: nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false,
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass
+      }
+    }),
+    fromEmail: adminEmail,
+    isRealGmail: false,
+    isTestFallback: true
+  };
 }
 
 export async function sendCertificateEmail({
@@ -58,49 +79,50 @@ export async function sendCertificateEmail({
   pdfPath,
   verifyUrl
 }) {
-  const transporter = await getTransporter();
+  const { transporter, fromEmail, isRealGmail, isTestFallback } = await getTransporter();
 
   const mailOptions = {
-    from: '"Cybersecurity Dept" <events.cyber@college.edu>',
+    from: `"Cybersecurity Department" <${fromEmail}>`,
     to: studentEmail,
-    subject: `Your Certificate of Participation: ${eventTitle}`,
+    replyTo: fromEmail,
+    subject: `Official Certificate of Participation: ${eventTitle}`,
     html: `
       <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px; border: 1px solid #e2e8f0; border-radius: 8px;">
-        <div style="background-color: #0f172a; padding: 16px; border-radius: 6px; text-align: center;">
+        <div style="background-color: #0f172a; padding: 18px; border-radius: 6px; text-align: center;">
           <h2 style="color: #38bdf8; margin: 0; font-size: 20px;">Department of Cybersecurity</h2>
-          <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 13px;">College of Engineering & Technology</p>
+          <p style="color: #94a3b8; margin: 4px 0 0 0; font-size: 13px;">Official Academic Credential Verification</p>
         </div>
 
         <div style="padding: 20px 0;">
           <h3 style="color: #1e293b;">Dear ${studentName},</h3>
           <p style="color: #475569; line-height: 1.6;">
-            Congratulations! Your attendance and participation in <b>${eventTitle}</b> held on <b>${eventDate}</b> has been successfully verified.
+            Congratulations! Your attendance in <b>${eventTitle}</b> on <b>${eventDate}</b> has been verified by the department.
           </p>
           <p style="color: #475569; line-height: 1.6;">
-            Your official verifiable digital certificate is attached to this email as a high-resolution PDF.
+            Your official verifiable participation certificate has been generated and is attached to this email as a high-resolution PDF.
           </p>
 
           <div style="background: #f8fafc; border-left: 4px solid #6366f1; padding: 12px 16px; margin: 20px 0;">
             <p style="margin: 0; color: #334155; font-size: 14px;"><strong>Credential ID:</strong> ${certId}</p>
             <p style="margin: 4px 0 0 0; color: #334155; font-size: 14px;">
-              <strong>Public Verification Link:</strong> 
+              <strong>Online Verification:</strong> 
               <a href="${verifyUrl}" style="color: #4f46e5; text-decoration: underline;" target="_blank">Verify Online</a>
             </p>
           </div>
 
           <p style="color: #64748b; font-size: 13px;">
-            You can showcase this credential on LinkedIn or attach it to your resume. Anyone can scan the embedded QR code to verify its authenticity instantly.
+            Issued by: <b>${fromEmail}</b> (Department Coordinator)
           </p>
         </div>
 
         <div style="border-top: 1px solid #e2e8f0; padding-top: 16px; color: #94a3b8; font-size: 12px; text-align: center;">
-          This is an automated system email from CertiPulse. Please do not reply directly to this email.
+          This is an official credential email dispatched by the Department of Cybersecurity.
         </div>
       </div>
     `,
     attachments: [
       {
-        filename: `Certificate_${studentName.replace(/[^a-zA-Z0-9]/g, '_')}_${certId}.pdf`,
+        filename: `Certificate_${studentName.replace(/[^a-zA-Z0-9]/g, '_')}.pdf`,
         path: pdfPath,
         contentType: 'application/pdf'
       }
@@ -108,16 +130,16 @@ export async function sendCertificateEmail({
   };
 
   const info = await transporter.sendMail(mailOptions);
+
   let previewUrl = null;
-  if (typeof nodemailer.getTestMessageUrl === 'function') {
+  if (isTestFallback && typeof nodemailer.getTestMessageUrl === 'function') {
     previewUrl = nodemailer.getTestMessageUrl(info);
-    if (previewUrl) {
-      console.log(`[Certificate Email Sent] Preview URL: ${previewUrl}`);
-    }
   }
 
   return {
     messageId: info.messageId,
-    previewUrl
+    previewUrl,
+    fromEmail,
+    isRealGmail
   };
 }

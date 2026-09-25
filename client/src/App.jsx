@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import Navbar from './components/Navbar';
+import AdminAuthModal from './components/AdminAuthModal';
 import Home from './pages/Home';
 import EventRegister from './pages/EventRegister';
 import AttendanceQR from './pages/AttendanceQR';
@@ -13,8 +14,27 @@ export default function App() {
   const [selectedEvent, setSelectedEvent] = useState(null);
   const [qrToken, setQrToken] = useState('');
   const [verifyCertId, setVerifyCertId] = useState('');
+  
+  // Admin Security Key State (persisted for the browser session)
+  const [isAdminAuthenticated, setIsAdminAuthenticated] = useState(() => {
+    return sessionStorage.getItem('certipulse_admin_auth') === 'true';
+  });
+  const [showAdminAuthModal, setShowAdminAuthModal] = useState(false);
 
-  // Handle URL parameters (e.g. from QR code scan or direct links)
+  // Global Keyboard Pattern: Ctrl + Shift + Alt + A
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.ctrlKey && e.shiftKey && e.altKey && (e.key === 'a' || e.key === 'A')) {
+        e.preventDefault();
+        setShowAdminAuthModal(true);
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
+  // Handle URL parameters (QR code scan, deep links)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const pathname = window.location.pathname;
@@ -29,9 +49,7 @@ export default function App() {
       const eventId = params.get('eventId');
       const token = params.get('token');
       if (token) setQrToken(token);
-      if (eventId) {
-        setSelectedEvent({ id: eventId });
-      }
+      if (eventId) setSelectedEvent({ id: eventId });
       setActivePage('checkin');
     }
   }, []);
@@ -48,7 +66,23 @@ export default function App() {
 
   const handleOpenAdmin = (event) => {
     setSelectedEvent(event);
+    if (!isAdminAuthenticated) {
+      setShowAdminAuthModal(true);
+    } else {
+      setActivePage('admin');
+    }
+  };
+
+  const handleAdminAuthSuccess = () => {
+    setIsAdminAuthenticated(true);
+    sessionStorage.setItem('certipulse_admin_auth', 'true');
     setActivePage('admin');
+  };
+
+  const handleAdminLogout = () => {
+    setIsAdminAuthenticated(false);
+    sessionStorage.removeItem('certipulse_admin_auth');
+    setActivePage('events');
   };
 
   const handleOpenTemplateEditor = (event) => {
@@ -65,8 +99,27 @@ export default function App() {
     <div className="min-h-screen bg-slate-950 flex flex-col font-sans">
       {/* Hide navbar on projector view for immersive presentation */}
       {activePage !== 'projector' && (
-        <Navbar activePage={activePage} setActivePage={setActivePage} />
+        <Navbar
+          activePage={activePage}
+          setActivePage={(page) => {
+            if (page === 'admin' && !isAdminAuthenticated) {
+              setShowAdminAuthModal(true);
+            } else {
+              setActivePage(page);
+            }
+          }}
+          isAdminAuthenticated={isAdminAuthenticated}
+          onAdminLogout={handleAdminLogout}
+          onOpenAdminAuth={() => setShowAdminAuthModal(true)}
+        />
       )}
+
+      {/* Secret Security Key Gate Modal */}
+      <AdminAuthModal
+        isOpen={showAdminAuthModal}
+        onClose={() => setShowAdminAuthModal(false)}
+        onSuccess={handleAdminAuthSuccess}
+      />
 
       <main className="flex-1">
         {activePage === 'events' && (
@@ -74,6 +127,7 @@ export default function App() {
             onSelectEvent={handleSelectEventForRegistration}
             onLaunchProjector={handleLaunchProjector}
             onOpenAdmin={handleOpenAdmin}
+            isAdminAuthenticated={isAdminAuthenticated}
           />
         )}
 
@@ -102,11 +156,23 @@ export default function App() {
         )}
 
         {activePage === 'admin' && (
-          <AdminDashboard
-            initialEventId={selectedEvent?.id}
-            onOpenTemplateEditor={handleOpenTemplateEditor}
-            onLaunchProjector={handleLaunchProjector}
-          />
+          isAdminAuthenticated ? (
+            <AdminDashboard
+              initialEventId={selectedEvent?.id}
+              onOpenTemplateEditor={handleOpenTemplateEditor}
+              onLaunchProjector={handleLaunchProjector}
+            />
+          ) : (
+            <div className="py-24 text-center space-y-3">
+              <p className="text-rose-400 font-bold">Access Restricted. Administrator credentials required.</p>
+              <button
+                onClick={() => setShowAdminAuthModal(true)}
+                className="px-4 py-2 rounded-xl bg-indigo-600 text-white text-xs font-semibold"
+              >
+                Authenticate with Security Key
+              </button>
+            </div>
+          )
         )}
 
         {activePage === 'template' && selectedEvent && (
@@ -124,15 +190,22 @@ export default function App() {
         )}
       </main>
 
-      {/* Footer */}
+      {/* Footer with subtle secret lock hint */}
       {activePage !== 'projector' && (
         <footer className="border-t border-slate-800/80 bg-slate-900/60 py-6 text-center text-xs text-slate-500">
           <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row items-center justify-between gap-2">
             <div>
               <span className="font-semibold text-slate-400">CertiPulse Portal</span> • Department of Cybersecurity
             </div>
-            <div>
-              Built for Institutional Event Management & Anti-Proxy Dynamic Certification
+            <div className="flex items-center space-x-2">
+              <span>Institutional Event Management & Dynamic Certification</span>
+              <button
+                onClick={() => setShowAdminAuthModal(true)}
+                title="Coordinator Key Entry (Ctrl+Shift+Alt+A)"
+                className="text-slate-600 hover:text-slate-400 text-[10px]"
+              >
+                🔒
+              </button>
             </div>
           </div>
         </footer>

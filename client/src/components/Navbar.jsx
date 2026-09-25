@@ -1,12 +1,12 @@
 import React from 'react';
-import { ShieldCheck, Calendar, QrCode, UserCheck, LayoutDashboard, Award } from 'lucide-react';
+import { ShieldCheck, Calendar, QrCode, UserCheck, Award, Lock, LogOut } from 'lucide-react';
 
-export default function Navbar({ activePage, setActivePage }) {
+export default function Navbar({ activePage, setActivePage, isAdminAuthenticated, onAdminLogout, onOpenAdminAuth }) {
+  // Public navigation items visible to all students
   const navItems = [
     { id: 'events', label: 'Events & Workshops', icon: Calendar },
     { id: 'projector', label: 'Projector QR', icon: QrCode },
     { id: 'checkin', label: 'Student Check-In', icon: UserCheck },
-    { id: 'admin', label: 'Admin Portal', icon: LayoutDashboard },
     { id: 'verify', label: 'Verify Certificate', icon: Award },
   ];
 
@@ -34,7 +34,7 @@ export default function Navbar({ activePage, setActivePage }) {
             </div>
           </div>
 
-          {/* Navigation Links */}
+          {/* Navigation Links (Public - Admin is hidden) */}
           <div className="hidden md:flex items-center space-x-1">
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -43,7 +43,7 @@ export default function Navbar({ activePage, setActivePage }) {
                 <button
                   key={item.id}
                   onClick={() => setActivePage(item.id)}
-                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-lg text-sm font-medium transition-all ${
+                  className={`flex items-center space-x-2 px-3.5 py-2 rounded-xl text-sm font-medium transition-all ${
                     isActive
                       ? 'bg-indigo-600 text-white shadow-md shadow-indigo-600/30'
                       : 'text-slate-300 hover:text-white hover:bg-slate-800/60'
@@ -54,19 +54,58 @@ export default function Navbar({ activePage, setActivePage }) {
                 </button>
               );
             })}
+
+            {/* If Admin is Authenticated, show Admin Portal access */}
+            {isAdminAuthenticated && (
+              <div className="flex items-center pl-2 space-x-1 border-l border-slate-800">
+                <button
+                  onClick={() => setActivePage('admin')}
+                  className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-xs font-bold transition-all ${
+                    activePage === 'admin'
+                      ? 'bg-amber-600 text-white shadow-lg shadow-amber-600/30'
+                      : 'bg-amber-950/60 text-amber-300 border border-amber-800/60 hover:bg-amber-900/60'
+                  }`}
+                >
+                  <Lock className="w-3.5 h-3.5 text-amber-400" />
+                  <span>Admin Console</span>
+                </button>
+
+                <button
+                  onClick={onAdminLogout}
+                  title="Lock Admin Session"
+                  className="p-2 rounded-xl text-slate-400 hover:text-rose-400 hover:bg-slate-800/60 transition-colors"
+                >
+                  <LogOut className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
           </div>
 
-          {/* Mobile Quick Switcher */}
-          <div className="flex md:hidden items-center space-x-1">
-            <select
-              value={activePage}
-              onChange={(e) => setActivePage(e.target.value)}
-              className="bg-slate-800 text-slate-200 border border-slate-700 text-xs rounded-lg px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-            >
-              {navItems.map(item => (
-                <option key={item.id} value={item.id}>{item.label}</option>
-              ))}
-            </select>
+          {/* Secret Discrete Trigger for Mobile / Touch screens (Hidden in plain sight) */}
+          <div className="flex items-center space-x-2">
+            {!isAdminAuthenticated && (
+              <button
+                onClick={onOpenAdminAuth}
+                title="Department Coordinator Access"
+                className="opacity-20 hover:opacity-100 p-2 text-slate-500 hover:text-indigo-400 transition-opacity"
+              >
+                <Lock className="w-3.5 h-3.5" />
+              </button>
+            )}
+
+            {/* Mobile Selector */}
+            <div className="flex md:hidden items-center space-x-1">
+              <select
+                value={activePage}
+                onChange={(e) => setActivePage(e.target.value)}
+                className="bg-slate-800 text-slate-200 border border-slate-700 text-xs rounded-xl px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              >
+                {navItems.map(item => (
+                  <option key={item.id} value={item.id}>{item.label}</option>
+                ))}
+                {isAdminAuthenticated && <option value="admin">Admin Console</option>}
+              </select>
+            </div>
           </div>
         </div>
       </div>

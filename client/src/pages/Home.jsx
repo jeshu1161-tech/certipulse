@@ -4,7 +4,7 @@ import {
   ArrowRight, Plus, Sparkles, Shield, QrCode, FileText 
 } from 'lucide-react';
 
-export default function Home({ onSelectEvent, onLaunchProjector, onOpenAdmin }) {
+export default function Home({ onSelectEvent, onLaunchProjector, onOpenAdmin, isAdminAuthenticated }) {
   const [events, setEvents] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showCreateModal, setShowCreateModal] = useState(false);
@@ -233,24 +233,36 @@ export default function Home({ onSelectEvent, onLaunchProjector, onOpenAdmin }) 
                       <span>Register for Event</span>
                     </button>
 
-                    <div className="grid grid-cols-2 gap-2 pt-1">
-                      <button
-                        onClick={() => onLaunchProjector(evt)}
-                        title="Open dynamic rotating QR screen on projector"
-                        className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/60 flex items-center justify-center space-x-1.5 transition-colors"
-                      >
-                        <QrCode className="w-3.5 h-3.5 text-cyan-400" />
-                        <span>Projector QR</span>
-                      </button>
-
-                      <button
-                        onClick={() => onOpenAdmin(evt)}
-                        title="Manage registrations & send certificates"
-                        className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/60 flex items-center justify-center space-x-1.5 transition-colors"
-                      >
-                        <FileText className="w-3.5 h-3.5 text-indigo-400" />
-                        <span>Admin ({attendedCount})</span>
-                      </button>
+                    <div className="pt-1">
+                      {isAdminAuthenticated ? (
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={() => onLaunchProjector(evt)}
+                            title="Open dynamic rotating QR screen on projector"
+                            className="py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/60 flex items-center justify-center space-x-1.5 transition-colors"
+                          >
+                            <QrCode className="w-3.5 h-3.5 text-cyan-400" />
+                            <span>Projector QR</span>
+                          </button>
+                          <button
+                            onClick={() => onOpenAdmin(evt)}
+                            title="Manage registrations & send certificates"
+                            className="py-2 px-3 rounded-lg bg-amber-950/60 hover:bg-amber-900/60 text-amber-300 text-xs font-semibold border border-amber-800/60 flex items-center justify-center space-x-1.5 transition-colors"
+                          >
+                            <FileText className="w-3.5 h-3.5 text-amber-400" />
+                            <span>Admin ({attendedCount})</span>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => onLaunchProjector(evt)}
+                          title="Open dynamic rotating QR screen on projector"
+                          className="w-full py-2 px-3 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium border border-slate-700/60 flex items-center justify-center space-x-1.5 transition-colors"
+                        >
+                          <QrCode className="w-3.5 h-3.5 text-cyan-400" />
+                          <span>Auditorium Projector QR</span>
+                        </button>
+                      )}
                     </div>
                   </div>
                 </div>

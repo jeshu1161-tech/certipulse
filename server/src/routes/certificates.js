@@ -2,26 +2,46 @@ import { Router } from 'express';
 import path from 'node:path';
 import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { fileURLToPath } from 'node:url';
-import { db } from '../db.js';
+import { db, uploadsDir, certsDir } from '../db.js';
 import { generateCertificate } from '../services/certGenerator.js';
-import { sendCertificateEmail } from '../services/emailService.js';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const certsDir = path.join(__dirname, '..', '..', 'generated_certs');
-const uploadsDir = path.join(__dirname, '..', '..', 'uploads');
+import { sendCertificateEmail, updateAdminSmtpConfig, getAdminSmtpConfig } from '../services/emailService.js';
 
 const router = Router();
+
+// GET SMTP / SENDER CONFIGURATION STATUS
+router.get('/smtp-status', (req, res) => {
+  res.json(getAdminSmtpConfig());
+});
+
+// UPDATE ADMIN GMAIL APP PASSWORD CONFIGURATION
+router.post('/smtp-config', (req, res) => {
+  const { adminEmail, adminPassword } = req.body;
+  if (!adminPassword?.trim()) {
+    return res.status(400).json({ error: 'Please enter your 16-character Google App Password.' });
+  }
+
+  updateAdminSmtpConfig({ adminEmail, adminPassword });
+  res.json({
+    success: true,
+    message: `Sender email configured as ${adminEmail || 'admin.murattukozhioffical@gmail.com'}. Real emails will now be dispatched directly via Gmail SMTP!`
+  });
+});
 
 // BATCH ISSUE CERTIFICATES & SEND EMAILS TO ALL ATTENDEES
 router.post('/events/:eventId/issue-certificates', async (req, res) => {
   try {
     const { eventId } = req.params;
-    const { forceResend } = req.body || {};
+    const { forceResend, bypassTemplateCheck } = req.body || {};
 
     const event = db.prepare('SELECT * FROM events WHERE id = ?').get(eventId);
     if (!event) return res.status(404).json({ error: 'Event not found' });
+
+    // COMPULSORY: Admin MUST upload a certificate template for this event
+    if (!event.template_image && !bypassTemplateCheck) {
+      return res.status(400).json({
+        error: 'Compulsory Requirement: Please upload the official certificate template image first before issuing certificates to participants.'
+      });
+    }
 
     // Fetch verified attendees
     let query = 'SELECT * FROM registrations WHERE event_id = ? AND attended = 1';
@@ -45,10 +65,9 @@ router.post('/events/:eventId/issue-certificates', async (req, res) => {
 
     for (const student of attendees) {
       try {
-        // Reuse existing cert ID or generate a new one
         const certId = student.certificate_id || `CERT-CYBER-${new Date().getFullYear()}-${crypto.randomBytes(4).toString('hex').toUpperCase()}`;
 
-        // 1. Generate PDF Certificate
+        // 1. Generate PDF Certificate with student name and verification QR code
         const { filePath } = await generateCertificate({
           studentName: student.student_name,
           eventTitle: event.title,
@@ -60,7 +79,7 @@ router.post('/events/:eventId/issue-certificates', async (req, res) => {
           verifyBaseUrl: `${clientBaseUrl}/verify`
         });
 
-        // 2. Dispatch Email with PDF attachment
+        // 2. Dispatch Email with PDF attachment from Admin's Gmail
         const emailResult = await sendCertificateEmail({
           studentEmail: student.email,
           studentName: student.student_name,
@@ -83,6 +102,8 @@ router.post('/events/:eventId/issue-certificates', async (req, res) => {
           email: student.email,
           cert_id: certId,
           status: 'SUCCESS',
+          sender: emailResult.fromEmail,
+          is_real_gmail: emailResult.isRealGmail,
           email_preview: emailResult.previewUrl
         });
       } catch (err) {
@@ -98,7 +119,7 @@ router.post('/events/:eventId/issue-certificates', async (req, res) => {
 
     res.json({
       success: true,
-      message: `Successfully processed ${results.filter(r => r.status === 'SUCCESS').length} of ${attendees.length} certificates.`,
+      message: `Processed ${results.filter(r => r.status === 'SUCCESS').length} of ${attendees.length} certificates.`,
       total: attendees.length,
       successful: results.filter(r => r.status === 'SUCCESS').length,
       failed: results.filter(r => r.status === 'FAILED').length,
